@@ -1,0 +1,216 @@
+'' =================================================================================================
+''
+''   File....... isp_hub75_binWtrWav.spin2
+''   Purpose.... manipulate the top pool of water which feeds our digits
+''   Authors.... Stephen M Moraco
+''               -- Copyright (c) 2022 Iron Sheep Productions, LLC
+''               -- see below for terms of use
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... Apr 2022
+''   Updated.... 06 Apr 2022
+''
+'' =================================================================================================
+
+CON { constants }
+    DEFAULT_WAVE_ROW = 1
+
+    MAX_BASE_WIDTH  = 5
+    MAX_TIP_WIDTH  = 2
+    MAX_HEIGHT      = 2
+
+    #0, WS_Unknown, WS_PENDING, WS_NEED_TIP, WS_HIDE_TIP, WS_DONE, WS_InActive
+
+    WAVE_1_COLOR    = $002EB9
+    WAVE_2_COLOR    = $00ff00
+    WAVE_3_COLOR    = $00ffff
+    WAVE_4_COLOR    = $0000ff
+    BLACK_COLOR     = $000000
+
+OBJ { object used }
+
+    screen      : "isp_hub75_screenAccess"
+    pixels      : "isp_hub75_screenUtils"
+    color       : "isp_hub75_color"
+
+DAT { initialized data }
+
+    waveBaseRow     LONG        DEFAULT_WAVE_ROW
+
+    showDebug       LONG        TRUE
+
+VAR { globals }
+
+    LONG    baseWidth       ' 1-4
+    LONG    tipWidth        ' 1-2
+    LONG    tipOffset       ' 0-3
+    LONG    endHeight       ' 1-2
+    LONG    ltColumn        ' colMax - baseWidth
+
+    LONG    currHeight
+    LONG    eCurrState
+    LONG    waveId
+
+CON { --- PUBLIC Methods --- }
+
+PUB null()
+    '' This is NOT a top level object
+
+PUB setId(nIdValue)
+    '' configure ID for use in debug msgs
+    waveId := nIdValue
+    eCurrState := WS_InActive
+
+PUB activate() | maxOffset
+    '' this wave needs to configure then show itself
+    baseWidth := (GETRND() +// MAX_BASE_WIDTH) + 1      ' Get a random number between 1 and MAX_BASE_WIDTH
+    if baseWidth > 2
+        tipWidth := (GETRND() +// MAX_TIP_WIDTH) + 1    ' Get a random number between 1 and MAX_BASE_WIDTH
+    else
+        tipWidth := 1                                   ' small tip in these cases
+    maxOffset := baseWidth - tipWidth
+    tipOffset := (GETRND() +// maxOffset)               ' Get a random number between 0 and maxOffset
+    endHeight := (GETRND() +// MAX_HEIGHT) + 1          ' Get a random number between 1 and MAX_HEIGHT
+    currHeight := 0
+    eCurrState := WS_PENDING
+    if showDebug
+        debug("wav: #", udec_(waveId), " activate() ", udec(baseWidth), udec(tipWidth), udec(endHeight))
+
+PUB getPossibleLocation() : nColumn, nWidth
+    '' return possible placement for wave (column, width)
+    nWidth := baseWidth
+    nColumn := (GETRND() +// (screen.MAX_PANEL_COLUMNS - baseWidth)) + 1  'Get a random number between 1 and (MAX_PANEL_COLUMNS-baseWidth)
+    if showDebug
+        debug("wav: #", udec_(waveId), " getPossibleLocation() ", udec(nColumn), udec(nWidth))
+
+PUB getLiveLocation() : nColumn, nWidth
+    '' return waves' configured location
+    nWidth := baseWidth
+    nColumn := ltColumn
+
+PUB configureWaves(nWaveBaseRow)
+    '' set values for all wave instances
+    waveBaseRow := nWaveBaseRow
+
+PUB isInUse() : inUseStatus
+    '' Return T/F where T means this wave is showing on the board...
+    inUseStatus := (eCurrState <> WS_InActive and eCurrState <> WS_Unknown) ? TRUE : FALSE
+
+PUB isMovementComplete() : isCompleteStatus | bitIndex
+    '' Return T/F where T means this wave animations are complete
+    isCompleteStatus := TRUE
+    if isInUse()
+        isCompleteStatus := FALSE
+
+PUB setLiveLocation(nColumn)
+    '' place wave at specified location
+    ltColumn := nColumn
+    placeWaveBase()
+    eCurrState := (endHeight == 1) ? WS_HIDE_TIP : WS_NEED_TIP
+    if showDebug
+        debug("wav: #", udec_(waveId), " setLiveLocation() ", udec(ltColumn))
+
+PUB animateStep() | bitIndex
+    '' Have this wave do 1 animation step, if one is pending
+    if isInUse()
+        debug("wav: #", udec_(waveId), " animateStep() ", udec(eCurrState))
+        case eCurrState
+            WS_NEED_TIP:
+                addWaveTip()
+                eCurrState := WS_HIDE_TIP
+            WS_HIDE_TIP:
+                removeWaveTip()
+                eCurrState := (endHeight == 1) ? WS_InActive : WS_DONE
+            WS_DONE:
+                removeWaveBase()
+                eCurrState := WS_InActive
+            other:
+                ' nothing to do...
+
+PRI placeWaveBase() | colIdx
+    ' place wave baseline
+    ' (draw tip as baseline)
+    colIdx := ltColumn + tipOffset
+    repeat tipWidth
+        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+    ' set current height of wave
+    currHeight++
+
+PRI addWaveTip() | colIdx
+    ' draw wave tip
+    ' (effectively, move tip up, add baseline)
+    ' draw tip in tip row
+    colIdx := ltColumn + tipOffset
+    repeat tipWidth
+        pixels.drawPixelAtRCwithRGB(waveBaseRow + 1, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+
+    ' draw baseline in baseline row
+    colIdx := ltColumn
+    repeat baseWidth
+        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_3_COLOR))
+    currHeight++
+
+PRI removeWaveTip() | colIdx
+    ' clear wave tip
+    ' (effectively, move tip down, replacing baseline)
+    ' clear tip
+    if endHeight == 1
+        ' the tip was painted as the base, remove it
+        colIdx := ltColumn + tipOffset
+        repeat tipWidth
+            pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
+    else
+        ' remove the top
+        colIdx := ltColumn + tipOffset
+        repeat tipWidth
+            pixels.drawPixelAtRCwithRGB(waveBaseRow+1, colIdx++, color.rgbForCValue(BLACK_COLOR))
+        ' remove the base
+        colIdx := ltColumn
+        repeat baseWidth
+            pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
+        ' draw tip as base
+        colIdx := ltColumn + tipOffset
+        repeat tipWidth
+            pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+    currHeight--
+
+PRI removeWaveBase() | colIdx
+    ' clear wave baseline
+    colIdx := ltColumn
+    repeat baseWidth
+        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
+    currHeight := 0
+
+CON { --- PRIVATE (Utility) Methods --- }
+
+PRI initialize()
+
+CON { license }
+
+{{
+
+
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2020 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+
+}}

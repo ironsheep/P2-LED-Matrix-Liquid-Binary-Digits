@@ -1,0 +1,184 @@
+'' =================================================================================================
+''
+''   File....... isp_hub75_binWtrSrc.spin2
+''   Purpose.... manipulate the top pool of water which feeds our digits
+''   Authors.... Stephen M Moraco
+''               -- Copyright (c) 2022 Iron Sheep Productions, LLC
+''               -- see below for terms of use
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... Apr 2022
+''   Updated.... 06 Apr 2022
+''
+'' =================================================================================================
+
+CON
+
+    MAX_WAVES = 6
+
+    WAVE_CHECK_SECS  = 5
+
+    WAVES_TO_ADD_COUNT = 2  ' add WAVES_TO_ADD_COUNT waves every WAVE_CHECK_SECS
+
+    WATER_1_COLOR = $002EB9
+    WATER_2_COLOR = $ffff00
+    WATER_3_COLOR = $ff8000
+    WATER_4_COLOR = $ff0000
+
+OBJ
+
+    screen              : "isp_hub75_screenAccess"
+    pixels              : "isp_hub75_screenUtils"
+    color               : "isp_hub75_color"
+    waves[MAX_WAVES]    : "isp_hub75_binWtrWav"
+
+DAT { initialized data }
+
+    showDebug   BYTE    TRUE
+    allowWaves  BYTE    FALSE
+
+VAR { globals }
+
+    long    nbrActiveWaves  ' keep track of total waves animating
+    long    nextActivateSecs  ' keep track of total waves animating
+
+PUB null()
+    '' This is NOT a top level object
+
+PUB setup() | wavIdx
+    '' simply configure and place on screen
+    ' do one-time setup of this object
+
+    'if showDebug
+    '    debug("wtr:setup() ENTRY")
+
+    nbrActiveWaves := 0
+    placeWaterAtRC(2, 0, WATER_1_COLOR)
+    nextActivateSecs := getsec()    ' set now so we check almost right away
+    ' call so we have better debug
+    repeat wavIdx from 0 to MAX_WAVES - 1
+        waves[wavIdx].setId(wavIdx)
+
+    'if showDebug
+    '    debug("wtr:setup() EXIT")
+
+PUB isMovementComplete() : isCompleteStatus | wavIndex
+    '' Return T/F where T means all bit and flow animations are complete
+    ' (1) do any animations of waves needed
+    isCompleteStatus := TRUE
+    if nbrActiveWaves > 0
+        repeat wavIndex from 0 to nbrActiveWaves - 1
+            if not waves[wavIndex].isMovementComplete()
+                isCompleteStatus := FALSE
+                quit   ' we have our answer, abort loop
+
+    if allowWaves
+        ' THEORY:
+        ' (2) we test for "need waves" every 5 seconds
+        '   we add waves (2 at a time) if we test and we are under max
+        if getsec() > nextActivateSecs
+            nextActivateSecs := getsec() + WAVE_CHECK_SECS
+            if nbrActiveWaves < MAX_WAVES
+                addWaves(WAVES_TO_ADD_COUNT)
+
+    'if showDebug
+    '    debug("wtr:isMovementComplete() ", udec(status))
+
+PUB animateStep() | wavIndex
+    '' Have each wave do 1 animation step, if one is pending
+    if not isMovementComplete()
+        'debug("wtr:animate ", udec(instanceID))
+        if nbrActiveWaves > 0
+            repeat wavIndex from 0 to nbrActiveWaves - 1
+                if not waves[wavIndex].isMovementComplete()
+                    waves[wavIndex].animateStep()
+                else
+                    nbrActiveWaves--    ' mark this one a newly inactive
+
+PRI placeWaterAtRC(row, column, waterColor)
+    ' draw our water pool, no waves
+    repeat screen.MAX_PANEL_COLUMNS
+        pixels.drawPixelAtRCwithRGB(row, column++, color.rgbForCValue(waterColor))
+
+PRI allWavesActive() : bAllActiveStatus
+    ' return T/F where T means we all max waves are showing
+    bAllActiveStatus := (nbrActiveWaves < MAX_WAVES) ? FALSE : TRUE
+
+PRI addWaves(nNbrWaves) | limitNbrWaves, freeWaves, nxtWavIdx
+    ' add number of waves requested (up to max)
+    if showDebug
+        debug("wtr:addWaves(", udec_(nNbrWaves), ")")
+
+    freeWaves := MAX_WAVES - nbrActiveWaves
+    limitNbrWaves :=  0 #> nNbrWaves <# freeWaves
+    repeat limitNbrWaves
+        nxtWavIdx := indexOfFreeWave()
+        if nxtWavIdx <> -1
+            waves[nxtWavIdx].activate()
+            negotiateWavePlacement(nxtWavIdx)
+            nbrActiveWaves++
+        else
+            debug("wtr:ERROR: no free waves! Abort start of new")
+            quit
+
+PRI indexOfFreeWave() : nWavIdx | wavIdx
+    ' return index of inactive wave (or -1 if none avail)
+    nWavIdx := -1
+    repeat wavIdx from 0 to MAX_WAVES - 1
+        if not waves[wavIdx].isInUse()
+            nWavIdx := wavIdx
+            quit
+
+PRI negotiateWavePlacement(nWaveIdx) | tmpWaveIdx, possColumn, possWidth, liveColumn, liveWidth, bHaveOverlap
+    bHaveOverlap := FALSE
+    if nbrActiveWaves > 0
+        REPEAT
+            possColumn, possWidth := waves[nWaveIdx].getPossibleLocation()
+            repeat tmpWaveIdx from 0 to nbrActiveWaves - 1
+                if waves[tmpWaveIdx].isInUse()
+                    liveColumn, liveWidth :=  waves[nWaveIdx].getLiveLocation()
+                    if locationsOverlap(possColumn, possWidth, liveColumn, liveWidth)
+                        bHaveOverlap := TRUE
+                        quit
+        UNTIL bHaveOverlap == FALSE
+    else
+        possColumn, possWidth := waves[nWaveIdx].getPossibleLocation()
+    waves[nWaveIdx].setLiveLocation(possColumn)
+
+PRI locationsOverlap(possColumn, possWidth, liveColumn, liveWidth) : bOverlapStatus
+    bOverlapStatus := TRUE
+    if liveColumn > possColumn + possWidth- 1
+        bOverlapStatus := FALSE
+    if liveColumn + liveWidth - 1 < possColumn
+        bOverlapStatus := FALSE
+
+
+CON { license }
+
+{{
+
+
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2020 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+
+}}
