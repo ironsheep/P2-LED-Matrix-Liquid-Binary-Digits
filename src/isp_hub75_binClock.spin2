@@ -33,7 +33,7 @@ OBJ { objects }
     display                 : "isp_hub75_display"
     color                   : "isp_hub75_color"
     digits[MAX_DIGITS]      : "isp_hub75_binDigit"
-'    fillWater               : "isp_hub75_binWtrSrc"
+    fillWater               : "isp_hub75_binWtrSrc"
 
 DAT { initialized data }
 
@@ -44,7 +44,7 @@ segmentPeriod   BYTE    0  ' was 5
 
 desiredBase     BYTE    BASE_UNKNOWN
 
-showDebug       BYTE    TRUE
+showDebug       BYTE    FALSE
 
 VAR { globals }
 
@@ -82,10 +82,8 @@ PUB setupClock(baseForDigits) : ok | digitIndex, row, col
     if showDebug
         debug("clk:setupClock() ", udec(baseForDigits))
 
-    'fillWater.setup()
-
-    'if showDebug
-    '    debug("clk:setupClock() fill-water setup")
+    ' start our feed water display
+    fillWater.setup()
 
     row := TOP_INSET
     col := LEFT_INSET
@@ -138,6 +136,8 @@ PUB setTimeHMS(hours, minutes, seconds)
 PUB runClock()
     '' Simply increment seconds(,minutes,hours) every second (assumes time is already set! - setTimeHMS() was already called
     '' FIXME: UNDONE -- not yet implemented --
+
+
 PRI setHMS(hours, minutes, seconds) | numberBase
     ' set the initial time to be displayed
     'debug("clk:set ", udec(hours), udec(minutes), udec(seconds))
@@ -159,33 +159,32 @@ PRI setHMS(hours, minutes, seconds) | numberBase
 
 PRI isAnimationComplete() : status | digitIndex
     ' Return T/F where T means all segment animations / water are complete
-    status := TRUE ' fillWater.isMovementComplete()
-    'if not status
-        repeat digitIndex from 0 to MAX_DIGITS - 1
-            if not digits[digitIndex].isMovementComplete()
-                status := FALSE
-                quit   ' we have our answer, abort loop
+    status := TRUE
+    repeat digitIndex from 0 to MAX_DIGITS - 1
+        if not digits[digitIndex].isMovementComplete()
+            status := FALSE
+            quit   ' we have our answer, abort loop
 
     'debug("clk:isAnimationComplete()-", udec(status))
 
 PRI loopUntilBitsFinish() | digitIndex, didStep
     if showDebug
         debug("clk:loopUntilBitsFinish()")
+
     repeat
         if not isAnimationComplete()
             didStep := FALSE
-            'if not fillWater.isMovementComplete()
-            '    fillWater.animateStep()
-            '    didStep := TRUE ' at least a wave stepped
-
             repeat digitIndex from 0 to MAX_DIGITS - 1
                 if not digits[digitIndex].isMovementComplete()
                     digits[digitIndex].animateStep()
                     didStep := TRUE ' at least 1 digit stepped
 
-            if didStep
+            if didStep or fillWater.didAnimate()
                 display.commitScreenToPanelSet()
                 wait100thSecs(segmentPeriod)
+
+        elseif fillWater.didAnimate()
+            display.commitScreenToPanelSet()
 
         if isAnimationComplete()
             quit

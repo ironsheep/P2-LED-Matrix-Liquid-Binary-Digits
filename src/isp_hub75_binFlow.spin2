@@ -86,7 +86,7 @@ DAT { debug stops }
     flowPairNumber  byte    -1
     flowPairsDone   byte    0
 
-    showDebug       BYTE    TRUE
+    showDebug       BYTE    FALSE
 
 VAR { globals }
     ' single flow state
@@ -326,12 +326,12 @@ PRI moveDrip() : atBitState | moved, haveRow, haveColumn, finishedCommand, place
     if not removeTail
         howMany := activateLocation(headRow, headCol)
         headColor := colorForCount(howMany)
-        'if headRow > 2  ' skip water pool
-        ' place bit at row,col
-        pixels.drawPixelAtRCwithRGB(headRow, headCol, color.rgbForCValue(headColor))
-        ' add to queue
-        pushHeadBit(headRow, headCol)
-        'debug("flo:moved headRC=(", udec_(headRow), udec_(headCol), ") ct=", udec_(dripEntryCount))
+        if headRow > 2  ' skip water pool
+            ' place bit at row,col
+            pixels.drawPixelAtRCwithRGB(headRow, headCol, color.rgbForCValue(headColor))
+            ' add to queue
+            pushHeadBit(headRow, headCol)
+            'debug("flo:moved headRC=(", udec_(headRow), udec_(headCol), ") ct=", udec_(dripEntryCount))
 
     ' if at max entries remove a bit, freeing queue entry
     if dripEntryCount >= MAX_LENGTH_OF_FLOW || removeTail

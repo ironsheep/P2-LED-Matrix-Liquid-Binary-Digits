@@ -15,7 +15,11 @@ CON
 
     MAX_WAVES = 6
 
-    WAVE_CHECK_SECS  = 5
+    WAVE_CHECK_SECS  = 3
+
+    ' this yields 20 to 50 ms wait time
+    WAVE_CHECK_MS  = 30
+    WAVE_CHECK_MS_BASE  = 20
 
     WAVES_TO_ADD_COUNT = 2  ' add WAVES_TO_ADD_COUNT waves every WAVE_CHECK_SECS
 
@@ -23,6 +27,8 @@ CON
     WATER_2_COLOR = $ffff00
     WATER_3_COLOR = $ff8000
     WATER_4_COLOR = $ff0000
+
+    WAV_STACK_SIZE_IN_LONGS = 64
 
 OBJ
 
@@ -34,65 +40,102 @@ OBJ
 DAT { initialized data }
 
     showDebug   BYTE    TRUE
-    allowWaves  BYTE    FALSE
+    allowWaves  BYTE    FALSE   ' T says paint waves
+    wavCog      BYTE    0
+
+
+    wavStack    LONG    0[WAV_STACK_SIZE_IN_LONGS]
 
 VAR { globals }
 
     long    nbrActiveWaves  ' keep track of total waves animating
     long    nextActivateSecs  ' keep track of total waves animating
+    long    nextIntervalSecs  ' keep track of total waves animating
+    long    nextActivateMS  ' keep track individual wave animation
+    long    nextIntervalMS  ' keep track individual wave animation
+    long    bDidAnimate
 
 PUB null()
     '' This is NOT a top level object
 
-PUB setup() | wavIdx
+PUB setup() : ok | wavIdx
     '' simply configure and place on screen
     ' do one-time setup of this object
+    bDidAnimate := FALSE
 
     'if showDebug
     '    debug("wtr:setup() ENTRY")
 
     nbrActiveWaves := 0
     placeWaterAtRC(2, 0, WATER_1_COLOR)
-    nextActivateSecs := getsec()    ' set now so we check almost right away
     ' call so we have better debug
     repeat wavIdx from 0 to MAX_WAVES - 1
         waves[wavIdx].setId(wavIdx)
 
+    if allowWaves
+        ' start our water animation COG
+        ok := wavCog := COGSPIN(NEWCOG, taskAnimateWaves(), @wavStack) + 1
+        if not wavCog
+            Debug("* ERROR failed to start wav-COG!")
+
     'if showDebug
     '    debug("wtr:setup() EXIT")
 
-PUB isMovementComplete() : isCompleteStatus | wavIndex
+PUB didAnimate() : animateStatus
+    '' Return T/F where T means this wave is showing on the board...
+    animateStatus := bDidAnimate
+    bDidAnimate := FALSE    ' clear until next set
+
+PRI taskAnimateWaves() | wavIdx, remainingMS
+    REPEAT
+        nextIntervalSecs := (GETRND() +// WAVE_CHECK_SECS) + 1              ' Get a random number between 1 and WAVE_CHECK_SECS
+        nextActivateSecs := nextIntervalSecs + getsec()
+        repeat
+            nextIntervalMS := (GETRND() +// WAVE_CHECK_MS) + WAVE_CHECK_MS_BASE ' Get a random number between WAVE_CHECK_MS_BASE and WAVE_CHECK_MS_BASE+WAVE_CHECK_MS
+            nextActivateMS := getms() + nextIntervalMS
+            ' animate active waves
+            if not isMovementComplete()
+                animateStep()
+                bDidAnimate := TRUE
+
+            remainingMS := nextActivateMS - getms()
+            if remainingMS > 0
+                waitms(remainingMS)
+        until getsec() > nextActivateSecs
+        ' add more waves if not max showing
+        ' THEORY:
+        ' (2) we test for "need waves" every 5 seconds
+        '   we add waves (2 at a time) if we test and we are under max
+        if nbrActiveWaves < MAX_WAVES
+            addWaves(WAVES_TO_ADD_COUNT)
+
+
+PUB isMovementComplete() : isCompleteStatus | wavIdx
     '' Return T/F where T means all bit and flow animations are complete
     ' (1) do any animations of waves needed
     isCompleteStatus := TRUE
     if nbrActiveWaves > 0
-        repeat wavIndex from 0 to nbrActiveWaves - 1
-            if not waves[wavIndex].isMovementComplete()
+        repeat wavIdx from 0 to MAX_WAVES - 1
+            if not waves[wavIdx].isMovementComplete()
                 isCompleteStatus := FALSE
                 quit   ' we have our answer, abort loop
 
-    if allowWaves
-        ' THEORY:
-        ' (2) we test for "need waves" every 5 seconds
-        '   we add waves (2 at a time) if we test and we are under max
-        if getsec() > nextActivateSecs
-            nextActivateSecs := getsec() + WAVE_CHECK_SECS
-            if nbrActiveWaves < MAX_WAVES
-                addWaves(WAVES_TO_ADD_COUNT)
-
-    'if showDebug
-    '    debug("wtr:isMovementComplete() ", udec(status))
-
-PUB animateStep() | wavIndex
+PUB animateStep() | wavIdx, priorActiveWaves
     '' Have each wave do 1 animation step, if one is pending
+    priorActiveWaves := nbrActiveWaves
     if not isMovementComplete()
         'debug("wtr:animate ", udec(instanceID))
         if nbrActiveWaves > 0
-            repeat wavIndex from 0 to nbrActiveWaves - 1
-                if not waves[wavIndex].isMovementComplete()
-                    waves[wavIndex].animateStep()
+            repeat wavIdx from 0 to MAX_WAVES - 1
+                if not waves[wavIdx].isMovementComplete()
+                    waves[wavIdx].animateStep()
                 else
-                    nbrActiveWaves--    ' mark this one a newly inactive
+                    nbrActiveWaves--    ' mark this one a no-longer inactive
+                    if nbrActiveWaves == 0
+                        quit   ' no more waves, abort loop
+
+        if showDebug and priorActiveWaves <> nbrActiveWaves
+            debug("wtr:animateStep() ", udec(nbrActiveWaves))
 
 PRI placeWaterAtRC(row, column, waterColor)
     ' draw our water pool, no waves
@@ -111,7 +154,7 @@ PRI addWaves(nNbrWaves) | limitNbrWaves, freeWaves, nxtWavIdx
     freeWaves := MAX_WAVES - nbrActiveWaves
     limitNbrWaves :=  0 #> nNbrWaves <# freeWaves
     repeat limitNbrWaves
-        nxtWavIdx := indexOfFreeWave()
+        nxtWavIdx := indexOfUnusedWave()
         if nxtWavIdx <> -1
             waves[nxtWavIdx].activate()
             negotiateWavePlacement(nxtWavIdx)
@@ -120,7 +163,10 @@ PRI addWaves(nNbrWaves) | limitNbrWaves, freeWaves, nxtWavIdx
             debug("wtr:ERROR: no free waves! Abort start of new")
             quit
 
-PRI indexOfFreeWave() : nWavIdx | wavIdx
+    if showDebug
+        debug("wtr:addWaves() ", udec(nbrActiveWaves))
+
+PRI indexOfUnusedWave() : nWavIdx | wavIdx
     ' return index of inactive wave (or -1 if none avail)
     nWavIdx := -1
     repeat wavIdx from 0 to MAX_WAVES - 1
@@ -128,13 +174,14 @@ PRI indexOfFreeWave() : nWavIdx | wavIdx
             nWavIdx := wavIdx
             quit
 
-PRI negotiateWavePlacement(nWaveIdx) | tmpWaveIdx, possColumn, possWidth, liveColumn, liveWidth, bHaveOverlap
+PRI negotiateWavePlacement(nWaveIdx) | wavIdx, possColumn, possWidth, liveColumn, liveWidth, bHaveOverlap
     bHaveOverlap := FALSE
     if nbrActiveWaves > 0
         REPEAT
             possColumn, possWidth := waves[nWaveIdx].getPossibleLocation()
-            repeat tmpWaveIdx from 0 to nbrActiveWaves - 1
-                if waves[tmpWaveIdx].isInUse()
+            bHaveOverlap := FALSE
+            repeat wavIdx from 0 to MAX_WAVES - 1
+                if waves[wavIdx].isInUse()
                     liveColumn, liveWidth :=  waves[nWaveIdx].getLiveLocation()
                     if locationsOverlap(possColumn, possWidth, liveColumn, liveWidth)
                         bHaveOverlap := TRUE
@@ -145,10 +192,11 @@ PRI negotiateWavePlacement(nWaveIdx) | tmpWaveIdx, possColumn, possWidth, liveCo
     waves[nWaveIdx].setLiveLocation(possColumn)
 
 PRI locationsOverlap(possColumn, possWidth, liveColumn, liveWidth) : bOverlapStatus
+    ' ensure waves don't overlap (and leave 1px gap, too)
     bOverlapStatus := TRUE
-    if liveColumn > possColumn + possWidth- 1
+    if possColumn + possWidth + 1  < liveColumn
         bOverlapStatus := FALSE
-    if liveColumn + liveWidth - 1 < possColumn
+    elseif liveColumn + liveWidth + 1 < possColumn
         bOverlapStatus := FALSE
 
 

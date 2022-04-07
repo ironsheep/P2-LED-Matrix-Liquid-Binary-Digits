@@ -22,7 +22,7 @@ OBJ
 
 DAT { globals - initialized - class data }
 
-    showDebug   BYTE    TRUE
+    showDebug   BYTE    FALSE
 
 VAR { globals - instance data }
     long    topRow

@@ -18,7 +18,11 @@ CON { constants }
     MAX_TIP_WIDTH  = 2
     MAX_HEIGHT      = 2
 
-    #0, WS_Unknown, WS_PENDING, WS_NEED_TIP, WS_HIDE_TIP, WS_DONE, WS_InActive
+    COUNT_BASE_BEWTEEN_WAVE_STATES = 3
+    COUNT_TIP_BEWTEEN_WAVE_STATES = 1
+
+
+    #0, WS_Unknown, WS_InActive, WS_SHOW_WAVE, WS_GROW_WAVE, WS_SHRINK_WAVE, WS_HIDE_WAVE
 
     WAVE_1_COLOR    = $002EB9
     WAVE_2_COLOR    = $00ff00
@@ -49,6 +53,8 @@ VAR { globals }
     LONG    currHeight
     LONG    eCurrState
     LONG    waveId
+    LONG    holdCt          ' time on screen (nbr of checks)
+
 
 CON { --- PUBLIC Methods --- }
 
@@ -71,7 +77,7 @@ PUB activate() | maxOffset
     tipOffset := (GETRND() +// maxOffset)               ' Get a random number between 0 and maxOffset
     endHeight := (GETRND() +// MAX_HEIGHT) + 1          ' Get a random number between 1 and MAX_HEIGHT
     currHeight := 0
-    eCurrState := WS_PENDING
+    eCurrState := WS_SHOW_WAVE
     if showDebug
         debug("wav: #", udec_(waveId), " activate() ", udec(baseWidth), udec(tipWidth), udec(endHeight))
 
@@ -95,8 +101,9 @@ PUB isInUse() : inUseStatus
     '' Return T/F where T means this wave is showing on the board...
     inUseStatus := (eCurrState <> WS_InActive and eCurrState <> WS_Unknown) ? TRUE : FALSE
 
+
 PUB isMovementComplete() : isCompleteStatus | bitIndex
-    '' Return T/F where T means this wave animations are complete
+    '' Return T/F where T means this wave animations are complete (wave now inactive)
     isCompleteStatus := TRUE
     if isInUse()
         isCompleteStatus := FALSE
@@ -104,79 +111,85 @@ PUB isMovementComplete() : isCompleteStatus | bitIndex
 PUB setLiveLocation(nColumn)
     '' place wave at specified location
     ltColumn := nColumn
-    placeWaveBase()
-    eCurrState := (endHeight == 1) ? WS_HIDE_TIP : WS_NEED_TIP
+    placeWaveTipAsBase()
+    eCurrState := (endHeight == 1) ? WS_HIDE_WAVE : WS_GROW_WAVE
     if showDebug
         debug("wav: #", udec_(waveId), " setLiveLocation() ", udec(ltColumn))
 
 PUB animateStep() | bitIndex
     '' Have this wave do 1 animation step, if one is pending
     if isInUse()
-        debug("wav: #", udec_(waveId), " animateStep() ", udec(eCurrState))
-        case eCurrState
-            WS_NEED_TIP:
-                addWaveTip()
-                eCurrState := WS_HIDE_TIP
-            WS_HIDE_TIP:
-                removeWaveTip()
-                eCurrState := (endHeight == 1) ? WS_InActive : WS_DONE
-            WS_DONE:
-                removeWaveBase()
-                eCurrState := WS_InActive
-            other:
-                ' nothing to do...
+        if holdCt > 0
+            holdCt--
+        else
+            debug("wav: #", udec_(waveId), " animateStep() ", udec(eCurrState))
+            case eCurrState
+                WS_GROW_WAVE:
+                    pushUpWaveTip()
+                    eCurrState := WS_SHRINK_WAVE
+                WS_SHRINK_WAVE:
+                    pushDownWaveTip()
+                    eCurrState :=  WS_HIDE_WAVE
+                WS_HIDE_WAVE:
+                    removeWaveTipAsBase()
+                    eCurrState := WS_InActive
+                other:
+                    ' nothing to do...
 
-PRI placeWaveBase() | colIdx
+PRI placeWaveTipAsBase() | colIdx
     ' place wave baseline
     ' (draw tip as baseline)
     colIdx := ltColumn + tipOffset
     repeat tipWidth
-        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_3_COLOR))
     ' set current height of wave
     currHeight++
+    holdCt := COUNT_TIP_BEWTEEN_WAVE_STATES
 
-PRI addWaveTip() | colIdx
+PRI pushUpWaveTip() | colIdx
     ' draw wave tip
     ' (effectively, move tip up, add baseline)
     ' draw tip in tip row
     colIdx := ltColumn + tipOffset
     repeat tipWidth
-        pixels.drawPixelAtRCwithRGB(waveBaseRow + 1, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+        pixels.drawPixelAtRCwithRGB(waveBaseRow - 1, colIdx++, color.rgbForCValue(WAVE_3_COLOR))
 
     ' draw baseline in baseline row
     colIdx := ltColumn
     repeat baseWidth
-        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_3_COLOR))
+        pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
     currHeight++
+    holdCt := COUNT_BASE_BEWTEEN_WAVE_STATES
 
-PRI removeWaveTip() | colIdx
+PRI pushDownWaveTip() | colIdx
     ' clear wave tip
     ' (effectively, move tip down, replacing baseline)
-    ' clear tip
     if endHeight == 1
         ' the tip was painted as the base, remove it
         colIdx := ltColumn + tipOffset
         repeat tipWidth
             pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
     else
-        ' remove the top
+        ' remove the tip
         colIdx := ltColumn + tipOffset
         repeat tipWidth
-            pixels.drawPixelAtRCwithRGB(waveBaseRow+1, colIdx++, color.rgbForCValue(BLACK_COLOR))
+            pixels.drawPixelAtRCwithRGB(waveBaseRow - 1, colIdx++, color.rgbForCValue(BLACK_COLOR))
         ' remove the base
         colIdx := ltColumn
         repeat baseWidth
             pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
+
         ' draw tip as base
         colIdx := ltColumn + tipOffset
         repeat tipWidth
-            pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_2_COLOR))
+            pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(WAVE_3_COLOR))
     currHeight--
+    holdCt := COUNT_TIP_BEWTEEN_WAVE_STATES
 
-PRI removeWaveBase() | colIdx
-    ' clear wave baseline
-    colIdx := ltColumn
-    repeat baseWidth
+PRI removeWaveTipAsBase() | colIdx
+    ' clear wave tip, baseline already removed
+    colIdx := ltColumn + tipOffset
+    repeat tipWidth
         pixels.drawPixelAtRCwithRGB(waveBaseRow, colIdx++, color.rgbForCValue(BLACK_COLOR))
     currHeight := 0
 
