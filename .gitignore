@@ -6,6 +6,31 @@ __pycache__/
 # C extensions
 *.so
 
+# ignore matrix driver files
+TstBG-Up.bmp
+TstBGCol.bmp
+isp_hub75_7seg.spin2
+isp_hub75_anlyCheck.spin2
+isp_hub75_color.spin2
+isp_hub75_demo7seg.spin2
+isp_hub75_demoColor.spin2
+isp_hub75_demoMultiPanel.spin2
+isp_hub75_demoText.spin2
+isp_hub75_display.spin2
+isp_hub75_display_bmp.spin2
+isp_hub75_fonts.spin2
+isp_hub75_hwGeometry.spin2
+isp_hub75_panel.spin2
+isp_hub75_rgb3bit.spin2
+isp_hub75_screenAccess.spin2
+isp_hub75_screenUtils.spin2
+isp_hub75_scrollingText.spin2
+isp_hub75_segment.spin2
+isp_hub75_demoMorphSeg.spin2
+isp_hub75_morph7seg.spin2
+isp_hub75_morphCounters.spin2
+isp_hub75_morphSegment.spin2
+
 # Distribution / packaging
 .Python
 build/

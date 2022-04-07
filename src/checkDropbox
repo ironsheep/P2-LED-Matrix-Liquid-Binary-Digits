@@ -1,0 +1,18 @@
+#!/bin/bash
+
+DBXPATH=/Users/stephen/Dropbox/PropV2-Shared/Projects/P2-LED-Matrix-Liquid-Binary-DigitsSW
+
+for FIL in *.spin2; do
+    #echo $FIL
+
+    LEFT=`md5 $FIL`
+    cd $DBXPATH 2>/dev/null 1>&2
+    RIGHT=`md5 $FIL`
+    cd - 2>/dev/null 1>&2
+
+    if [ "$LEFT" != "$RIGHT" ]; then
+        echo "Diff: $FIL"
+        (set -x;cp -p $DBXPATH/$FIL .)
+    fi
+
+done

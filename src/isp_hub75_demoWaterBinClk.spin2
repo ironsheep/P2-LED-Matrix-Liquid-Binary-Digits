@@ -1,13 +1,13 @@
 '' =================================================================================================
 ''
-''   File....... isp_hub75_demoBin.spin2
-''   Purpose.... Top-level Demonstration - showing off our HUB75 matrix and waterery  binary clock
+''   File....... isp_hub75_demoWaterBinClk.spin2
+''   Purpose.... Top-level Demonstration - showing off our HUB75 matrix using a watery binary clock
 ''   Authors.... Stephen M Moraco
 ''               -- Copyright (c) 2020 Iron Sheep Productions, LLC
 ''               -- see below for terms of use
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Oct 2020
-''   Updated.... 17 Oct 2020
+''   Updated.... 06 Apr 2022
 ''
 '' =================================================================================================
 
@@ -42,7 +42,7 @@ PUB start() : ok | bitCount, newMask
 
     '' run demo - counting clock in dec or hex
 
-    digitPeriod := 3    ' 12
+    digitPeriod := 50    ' 12
     segmentPeriod := 0  ' was 5
 
     binaryClockDemo()
@@ -50,6 +50,7 @@ PUB start() : ok | bitCount, newMask
 
 PUB binaryClockDemo() | red, green, blue
     ''  BINARY DEMO -> heading to liquid binary
+    debug("* start clock")
     clock.setOnOffColors(color.cBlue, $363636)
     clock.setupClock(clock.BASE_DECIMAL_DIGITS)
 
@@ -69,6 +70,7 @@ PUB binaryClockDemo() | red, green, blue
 
 PUB allDigitsDemo() | red, green, blue, bitValue
     ''  BINARY DEMO -> base 16 clocking all digits at same time
+    debug("* show all digits")
     clock.setOnOffColors(color.cBlue, $363636)
     clock.setupClock(clock.BASE_HEX_DIGITS)
 
