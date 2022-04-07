@@ -1,7 +1,7 @@
 '' =================================================================================================
 ''
 ''   File....... isp_hub75_binDigit.spin2
-''   Purpose.... manipulate a column of 4-bits representing a single digit
+''   Purpose.... manipulate a single-bit of 4-bits representing a single digit
 ''   Authors.... Stephen M Moraco
 ''               -- Copyright (c) 2020 Iron Sheep Productions, LLC
 ''               -- see below for terms of use
@@ -25,6 +25,7 @@ OBJ
 
 DAT { initialized data }
 
+    showDebug   BYTE    FALSE
 
 VAR { globals }
     long    topRow
@@ -63,9 +64,10 @@ PUB null()
 
 
 PUB placeBitAtRC(row, column, bitId, fullColor, emptyColor) | bitIndex
-    debug("bit:place @RC(", udec_(row), ",", udec_(column), ") ", ubin(bitId), uhex_long(fullColor), uhex_long(emptyColor))
     if NOT isSetup
         initialize()
+    if showDebug
+        debug("bit:place @RC(", udec_(row), ",", udec_(column), ") ", ubin(bitId), uhex_long(fullColor), uhex_long(emptyColor))
     topRow := row
     leftColumn := column
     instanceID := bitId         ' jut for info / debug, etc.
@@ -86,7 +88,7 @@ PRI initialize()
 
 PUB setValue(bitValue) | newEndState
     '' Set a new value for this bit of a digit
-    'debug("dig:setValue ", ubin(digit))
+    'debug("bit:setValue ", ubin(digit))
     if currBitValue <> bitValue
         ' if bit is turning on
         if bitValue == 1
@@ -137,10 +139,10 @@ PUB moveBitToState(newEndState)
     if desiredEndState <> newEndState
         ' if we are not yet at an end state (still moving) then abort
         if currentState <> STATE_EMPTY && currentState <> STATE_FULL
-            debug("SEG: state still in motion, ignoring request")
+            debug("bit: state still in motion, ignoring request")
             abort
         if newEndState <> STATE_EMPTY && newEndState <> STATE_FULL
-            debug("SEG: BAD end-state must be EMPTY or FULL!")
+            debug("bit: BAD end-state must be EMPTY or FULL!")
             abort
         if newEndState == STATE_FULL
             ' empty filling up
@@ -151,50 +153,67 @@ PUB moveBitToState(newEndState)
         updateBitToState(nextState)
         desiredEndState := newEndState
     else
-        debug("  -- already in desiredEndState?")
+        debug("bit:  -- already in desiredEndState?")
 
-PRI updateBitToState(newState)
+PRI updateBitToState(newState) | bWaitFill, bWaitEmpty
     'debug("bit:id(bit", udec_(currValue), "), moveTo (st", udec_(currentState), ") -> (st", udec_(newState), ")")
+    bWaitFill := bWaitEmpty := TRUE
     if newState <> STATE_FULL
         ' clear the bit
         fillBit(bitHeight, emptyRgbColor)
+
     ' now draw bit lines that are showing
     case newState
         STATE_FILLING_1:   ' 1 line filled
                 fillBit(bitHeight - 4, fullRgbColor)
                 nextState := STATE_FILLING_2
+                bWaitEmpty := FALSE
         STATE_FILLING_2:   ' 2 lines filled
                 fillBit(bitHeight - 3, fullRgbColor)
                 nextState := STATE_FILLING_3
+                bWaitEmpty := FALSE
         STATE_FILLING_3:   ' 3 lines filled
                 fillBit(bitHeight - 2, fullRgbColor)
                 nextState := STATE_FILLING_4
+                bWaitEmpty := FALSE
         STATE_FILLING_4:   ' 3 lines filled
                 fillBit(bitHeight - 1, fullRgbColor)
                 nextState := STATE_FULL
+                bWaitEmpty := FALSE
         STATE_FULL:   ' all lines filled
                 fillBit(bitHeight, fullRgbColor)
                 'debug("bit:FULL")
+                bWaitFill := bWaitEmpty := FALSE
         STATE_EMPTYING_4:  ' 4 lines empty
                 fillBit(bitHeight - 1, fullRgbColor)
                 nextState := STATE_EMPTYING_3
+                bWaitFill := FALSE
         STATE_EMPTYING_3:  ' 3 lines empty
                 fillBit(bitHeight - 2, fullRgbColor)
                 nextState := STATE_EMPTYING_2
+                bWaitFill := FALSE
         STATE_EMPTYING_2:  ' 2 lines empty
                 fillBit(bitHeight - 3, fullRgbColor)
                 nextState := STATE_EMPTYING_1
+                bWaitFill := FALSE
         STATE_EMPTYING_1:  ' 1 line empty
                 fillBit(bitHeight - 4, fullRgbColor)
                 nextState := STATE_EMPTY
+                bWaitFill := FALSE
         STATE_EMPTY:  ' nothing to do since we clear segment first
                 'debug("bit:EMPTY")
+                bWaitFill := bWaitEmpty := FALSE
         OTHER:
-            debug("STATE(vrtL) not yet implemented (", udec_(newstate), ")")
+            debug("bit: STATE(vrtL) not yet implemented (", udec_(newstate), ")")
     currentState := newState
 
-' FIXME: UNDONE state changes would be faster if we filled or cleared just the lines that changed!
+    ' wait only if in midst of change
+    if bWaitFill
+        waitms(75)
+    elseif bWaitEmpty
+        waitms(15)
 
+' FIXME: UNDONE state changes would be faster if we filled or cleared just the lines that changed!
 PRI fillBit(level, rgbColor) | rowIndex, rowBottom, rowTop
     if level > 0
         rowBottom := topRow + bitHeight - 1
@@ -203,7 +222,7 @@ PRI fillBit(level, rgbColor) | rowIndex, rowBottom, rowTop
             drawLine(rowIndex, leftColumn, rowIndex, leftColumn + bitWidth - 1, rgbColor)
 
 PRI drawBit(row, column, rgbColor) | rowIndex
-    'debug("dig:drawBit @RC(", udec_(row), ",", udec_(column), ") ", uhex_long(rgbColor))
+    'debug("bit:drawBit @RC(", udec_(row), ",", udec_(column), ") ", uhex_long(rgbColor))
     repeat rowIndex from row to bitHeight + row - 1
         drawLine(rowIndex, column, rowIndex, column + bitWidth - 1, rgbColor)
 
@@ -222,7 +241,7 @@ PRI drawLine(fmRow, fmColumn, toRow, toColumn, rgbColor) | row, column
         repeat row from fmRow to toRow
             pixels.drawPixelAtRCwithRGB(row, fmColumn, color.rgbForCValue(rgbColor))
     else
-        debug("DIAG lines not implemented !")
+        debug("bit: DIAG lines not implemented !")
         abort
 
 

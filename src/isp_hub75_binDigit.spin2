@@ -22,6 +22,7 @@ OBJ
 
 DAT { globals - initialized - class data }
 
+    showDebug   BYTE    TRUE
 
 VAR { globals - instance data }
     long    topRow
@@ -44,9 +45,10 @@ PUB null()
 
 
 PUB placeDigitAtRC(row, column, digitId, fullColor, emptyColor) | bitIndex, dispRow, dispCol
-    debug("dig:place @RC(", udec_(row), ",", udec_(column), ") ", udec(digitId), uhex_long(fullColor), uhex_long(emptyColor))
     if NOT isSetup
         initialize()
+    if showDebug
+        debug("dig:place @RC(", udec_(row), ",", udec_(column), ") ", udec(digitId), uhex_long(fullColor), uhex_long(emptyColor))
     dispRow := topRow := row
     dispCol := leftColumn := column
     instanceID := digitId
@@ -58,7 +60,8 @@ PUB placeDigitAtRC(row, column, digitId, fullColor, emptyColor) | bitIndex, disp
 
 PUB setValue(digit) | bitIndex, dispRow, dispCol, bitValue
     '' Set a new value for this column [0-15]
-    debug("dig:setValue ", ubin(digit))
+    if showDebug
+        debug("dig:setValue ", ubin(digit))
     repeat bitIndex from 0 to MAX_BITS - 1
         bitValue := (digit & (1 << ((MAX_BITS - 1) - bitIndex))) > 0 ? 1 : 0
         bits[bitIndex].setValue(bitValue)

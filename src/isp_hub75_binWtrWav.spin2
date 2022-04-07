@@ -36,7 +36,7 @@ DAT { initialized data }
 
     waveBaseRow     LONG        DEFAULT_WAVE_ROW
 
-    showDebug       LONG        TRUE
+    showDebug       BYTE        TRUE
 
 VAR { globals }
 

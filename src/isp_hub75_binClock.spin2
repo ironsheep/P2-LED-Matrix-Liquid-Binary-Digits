@@ -33,15 +33,18 @@ OBJ { objects }
     display                 : "isp_hub75_display"
     color                   : "isp_hub75_color"
     digits[MAX_DIGITS]      : "isp_hub75_binDigit"
+'    fillWater               : "isp_hub75_binWtrSrc"
 
 DAT { initialized data }
 
 isSetup         BYTE    FALSE
+
 digitPeriod     BYTE    3    ' 12
 segmentPeriod   BYTE    0  ' was 5
 
 desiredBase     BYTE    BASE_UNKNOWN
 
+showDebug       BYTE    TRUE
 
 VAR { globals }
 
@@ -67,14 +70,22 @@ PUB setupClock(baseForDigits) : ok | digitIndex, row, col
         BASE_DECIMAL_DIGITS:
         BASE_HEX_DIGITS:
         OTHER:
-            debug("- DEMO: ERROR please select Decimal or Hex counting!")
+            debug("- clk:setupClock() ERROR please select Decimal or Hex counting!")
             abort
     desiredBase := baseForDigits
 
     ok := cog := display.start()   ' send buffer to driver
     if ok == -1
-        debug("- DEMO: underlying drivers failed!")
+        debug("- clk:setupClock() ERROR driver start failed!")
         abort
+
+    if showDebug
+        debug("clk:setupClock() ", udec(baseForDigits))
+
+    'fillWater.setup()
+
+    'if showDebug
+    '    debug("clk:setupClock() fill-water setup")
 
     row := TOP_INSET
     col := LEFT_INSET
@@ -85,9 +96,13 @@ PUB setupClock(baseForDigits) : ok | digitIndex, row, col
             col += HORIZ_ODD_OFFSET + DIGIT_WIDTH
         else
             col += HORIZ_EVEN_OFFSET + DIGIT_WIDTH
-    display.commitScreenToPanel()
 
-  '  repeat ' hold here
+    if showDebug
+        debug("clk:setupClock() digits setup")
+
+    display.commitScreenToPanelSet()
+
+    '  repeat ' hold here
 
 PUB stopClock() : ok
     '' Stop our back-end display driver
@@ -97,14 +112,15 @@ PUB stopClock() : ok
 
 PUB setTimeHMS(hours, minutes, seconds)
     '' Configure the clock with the initial time value
-    debug("clk:setTimeHMS ", udec(hours), udec(minutes), udec(seconds))
+    if showDebug
+        debug("clk:setTimeHMS ", udec(hours), udec(minutes), udec(seconds))
 
     if isAnimationComplete()
         ' evaluate what needs to change, cause change
                 ' TEST checking out flows - tweaking them
 
         setHMS(hours, minutes, seconds)
-        display.commitScreenToPanel()
+        display.commitScreenToPanelSet()
         wait100thSecs(segmentPeriod)
         loopUntilBitsFinish()
 
@@ -113,7 +129,7 @@ PUB setTimeHMS(hours, minutes, seconds)
         currMinutes := minutes
         currSeconds := seconds
     else
-        debug("ERROR: animation NOT complete, IGNORING setTimeHMS()")
+        debug("clk:ERROR: animation NOT complete, IGNORING setTimeHMS()")
 
     'debug("--  hold --")
     'repeat
@@ -142,26 +158,34 @@ PRI setHMS(hours, minutes, seconds) | numberBase
     showSecondsDots( seconds // 2 )
 
 PRI isAnimationComplete() : status | digitIndex
-    ' Return T/F where T means all segment animations are complete
-    status := TRUE
-    repeat digitIndex from 0 to MAX_DIGITS - 1
-        if not digits[digitIndex].isMovementComplete()
-            status := FALSE
-            quit   ' we have our answer, abort loop
+    ' Return T/F where T means all segment animations / water are complete
+    status := TRUE ' fillWater.isMovementComplete()
+    'if not status
+        repeat digitIndex from 0 to MAX_DIGITS - 1
+            if not digits[digitIndex].isMovementComplete()
+                status := FALSE
+                quit   ' we have our answer, abort loop
+
+    'debug("clk:isAnimationComplete()-", udec(status))
 
 PRI loopUntilBitsFinish() | digitIndex, didStep
-    debug("clk:loopUntilBitsFinish()")
+    if showDebug
+        debug("clk:loopUntilBitsFinish()")
     repeat
         if not isAnimationComplete()
             didStep := FALSE
+            'if not fillWater.isMovementComplete()
+            '    fillWater.animateStep()
+            '    didStep := TRUE ' at least a wave stepped
+
             repeat digitIndex from 0 to MAX_DIGITS - 1
                 if not digits[digitIndex].isMovementComplete()
                     digits[digitIndex].animateStep()
                     didStep := TRUE ' at least 1 digit stepped
 
-                if didStep
-                    display.commitScreenToPanel()
-                    wait100thSecs(segmentPeriod)
+            if didStep
+                display.commitScreenToPanelSet()
+                wait100thSecs(segmentPeriod)
 
         if isAnimationComplete()
             quit

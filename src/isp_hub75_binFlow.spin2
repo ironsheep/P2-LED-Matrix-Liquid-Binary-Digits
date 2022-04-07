@@ -83,9 +83,10 @@ TBL_OFFSET_OUTFLOWS = 4
 
 DAT { debug stops }
 
-flowPairNumber  byte    -1
-flowPairsDone   byte    0
+    flowPairNumber  byte    -1
+    flowPairsDone   byte    0
 
+    showDebug       BYTE    TRUE
 
 VAR { globals }
     ' single flow state
@@ -120,8 +121,8 @@ PUB setUpInAndOutFlows(bitRow, bitColumn, bitWidth, bitHeight) | pCommandTable, 
         initialize()
 
     flowPairsDone += 1
-
-    debug("flo:setup ", udec(bitRow), udec(bitColumn), udec(bitWidth), udec(bitHeight))
+    if showDebug
+        debug("flo:setup ", udec(bitRow), udec(bitColumn), udec(bitWidth), udec(bitHeight))
 
 
     ' setup inflow table
@@ -175,7 +176,8 @@ PUB setUpInAndOutFlows(bitRow, bitColumn, bitWidth, bitHeight) | pCommandTable, 
     pTemp0 := @inflowTable
     pTemp1 := @outflowTable
     'screen.dbgMemDump(@tableMessage, @inflowTable, 13 * 2)
-    debug("flo:initialize ", uhex_long(pTemp0), uhex_long(pTemp1))
+    if showDebug
+        debug("flo:initialize ", uhex_long(pTemp0), uhex_long(pTemp1))
 
     if flowPairsDone >= flowPairNumber && flowPairsDone <= flowPairNumber + 1
         dumpTables(@inflowTable, 6, @outflowTable, 7)
@@ -195,6 +197,8 @@ PRI dumpTables(pInflowTable, inEntryCount, pOutFlowTable, outEntryCount) | entry
 
 PRI initialize() | digitIndex
     'debug("`term temp size 82 50 textsize 10")
+    if showDebug
+        debug("flo:initialize()")
 
     isSetup := TRUE
     dripCommand := DIR_UNKNOWN
@@ -220,7 +224,7 @@ PUB startFlow(direction) | pCommandTable
             TYPE_OUTFLOW:
                 pCommandTable := @outflowTable
             other:
-                debug("flo:start - IGNORED already moving")
+                debug("flo:start - DIRECTION ODD, already moving")
                 abort
         ' initiate the single flow
         initiateFlow(pCommandTable)
@@ -231,7 +235,8 @@ PUB isInUse() : inUseStatus
 
     ' if we've a nybble set or we still moving this flow is in use
     inUseStatus := (dripCommand == DIR_DONE || dripCommand == DIR_UNKNOWN) ? FALSE : TRUE
-    debug("flo:check ", udec(inUseStatus), udec(dripCommand))
+    if showDebug
+        debug("flo:check ", udec(inUseStatus), udec(dripCommand))
 
 PUB isMovementComplete() : status
     '' Return T/F where T means that all movement for this bit is complete
@@ -247,7 +252,8 @@ PUB animateStep() : result | moveEndedAtBitState
 
 PRI initiateFlow(pFlowTable) | command, distance
     ' load first command, make initial move
-    debug("flo:initiateFlow ", uhex_long(pFlowTable))
+    if showDebug
+        debug("flo:initiateFlow ", uhex_long(pFlowTable))
     pCurrFlowTable := pFlowTable
     dripEntryIndex := 0
     dripCommand, dripRemaining := nextCommand()
@@ -300,7 +306,7 @@ PRI moveDrip() : atBitState | moved, haveRow, haveColumn, finishedCommand, place
                 removeTail := TRUE
                 dripRemaining := dripEntryCount + 1
             OTHER:
-                debug("dig: bad drip command (", udec_(dripCommand), ")")
+                debug("flo: bad drip command (", udec_(dripCommand), ")")
                 abort
 
         if moved
@@ -320,6 +326,7 @@ PRI moveDrip() : atBitState | moved, haveRow, haveColumn, finishedCommand, place
     if not removeTail
         howMany := activateLocation(headRow, headCol)
         headColor := colorForCount(howMany)
+        'if headRow > 2  ' skip water pool
         ' place bit at row,col
         pixels.drawPixelAtRCwithRGB(headRow, headCol, color.rgbForCValue(headColor))
         ' add to queue
